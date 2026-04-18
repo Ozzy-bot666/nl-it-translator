@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: nl-it-translator
+    runtime: docker
+    plan: starter
+    healthCheckPath: /
+    envVars:
+      - key: DAILY_API_KEY
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: CARTESIA_API_KEY
+        sync: false
+      - key: DUTCH_VOICE_ID
+        sync: false
+      - key: ITALIAN_VOICE_ID
+        sync: false
