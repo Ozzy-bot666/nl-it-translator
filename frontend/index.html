@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🇳🇱 ↔ 🇮🇹 Vertaler</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Retell SDK dependencies -->
-  <script src="https://cdn.jsdelivr.net/npm/eventemitter3@5.0.1/dist/eventemitter3.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.1.5/dist/livekit-client.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/retell-client-js-sdk@2.0.7/dist/index.umd.min.js"></script>
   <style>
     @keyframes pulse-ring {
       0% { transform: scale(1); opacity: 1; }
@@ -49,10 +45,6 @@
                shadow-2xl transition-all duration-200 
                flex items-center justify-center
                disabled:opacity-50 disabled:cursor-not-allowed"
-        onmousedown="startRecording()"
-        onmouseup="stopRecording()"
-        ontouchstart="startRecording()"
-        ontouchend="stopRecording()"
       >
         <svg id="mic-icon" class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -81,7 +73,10 @@
     Powered by Retell AI
   </footer>
 
-  <script>
+  <script type="module">
+    // Import Retell SDK via esm.sh (bundles dependencies)
+    import { RetellWebClient } from 'https://esm.sh/retell-client-js-sdk@2.0.7';
+    
     // Config - UPDATE THESE
     const RETELL_AGENT_ID = 'agent_6b0a26a4e455828ed23c7abc6f';
     const BACKEND_URL = 'https://nl-it-translator-backend.onrender.com';
@@ -97,11 +92,6 @@
 
     async function initRetell() {
       try {
-        // SDK exports to retellClientJsSdk.RetellWebClient
-        const RetellWebClient = window.retellClientJsSdk?.RetellWebClient;
-        if (!RetellWebClient) {
-          throw new Error('Retell SDK niet geladen');
-        }
         retellClient = new RetellWebClient();
         
         retellClient.on('call_started', () => {
@@ -218,6 +208,12 @@
 
     // Prevent context menu on long press (mobile)
     pttBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    // Attach event handlers (module scope doesn't expose to HTML attributes)
+    pttBtn.addEventListener('mousedown', startRecording);
+    pttBtn.addEventListener('mouseup', stopRecording);
+    pttBtn.addEventListener('touchstart', (e) => { e.preventDefault(); startRecording(); });
+    pttBtn.addEventListener('touchend', (e) => { e.preventDefault(); stopRecording(); });
     
     // Initialize
     updateStatus('Klik op de microfoon om te verbinden');
