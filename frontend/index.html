@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>🇳🇱 ↔ 🇮🇹 Vertaler</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/retell-client-js-sdk@3.3.3/dist/index.umd.min.js"></script>
+  <!-- Retell SDK dependencies -->
+  <script src="https://cdn.jsdelivr.net/npm/eventemitter3@5.0.1/dist/eventemitter3.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.1.5/dist/livekit-client.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/retell-client-js-sdk@2.0.7/dist/index.umd.min.js"></script>
   <style>
     @keyframes pulse-ring {
       0% { transform: scale(1); opacity: 1; }
@@ -94,7 +97,12 @@
 
     async function initRetell() {
       try {
-        retellClient = new window.RetellClient();
+        // SDK exports to retellClientJsSdk.RetellWebClient
+        const RetellWebClient = window.retellClientJsSdk?.RetellWebClient;
+        if (!RetellWebClient) {
+          throw new Error('Retell SDK niet geladen');
+        }
+        retellClient = new RetellWebClient();
         
         retellClient.on('call_started', () => {
           console.log('Call started');
