@@ -1,11 +1,16 @@
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
+const { WebSocketServer } = require('ws');
+const http = require('http');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+const server = http.createServer(app);
+const wss = new WebSocketServer({ server, path: '/llm-websocket' });
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
@@ -26,9 +31,7 @@ app.post('/get-call-token', async (req, res) => {
         'Authorization': `Bearer ${RETELL_API_KEY}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        agent_id: agent_id,
-      }),
+      body: JSON.stringify({ agent_id }),
     });
     
     if (!response.ok) {
@@ -46,55 +49,79 @@ app.post('/get-call-token', async (req, res) => {
   }
 });
 
-// Retell Custom LLM webhook
-// https://docs.retellai.com/build-custom-llm/websocket-custom-llm
-app.post('/llm-webhook', async (req, res) => {
-  try {
-    const { transcript, interaction_type } = req.body;
-    
-    console.log('Received:', { interaction_type, transcript });
+// WebSocket handler for Retell Custom LLM
+wss.on('connection', (ws, req) => {
+  console.log('Retell WebSocket connected');
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message.toString());
+      console.log('Received:', data.interaction_type, data.transcript?.slice(0, 50));
 
-    // Handle different interaction types
-    if (interaction_type === 'ping_pong') {
-      return res.json({ response_type: 'ping_pong' });
-    }
+      // Ping pong for connection keep-alive
+      if (data.interaction_type === 'ping_pong') {
+        ws.send(JSON.stringify({ 
+          response_type: 'ping_pong',
+          timestamp: Date.now()
+        }));
+        return;
+      }
 
-    if (interaction_type === 'call_details') {
-      // Initial call setup - give brief instruction
-      return res.json({
+      // Call started - silent greeting
+      if (data.interaction_type === 'call_details') {
+        ws.send(JSON.stringify({
+          response_type: 'response',
+          content: '',
+          content_complete: true,
+        }));
+        return;
+      }
+
+      // Update only - acknowledge
+      if (data.interaction_type === 'update_only') {
+        return;
+      }
+
+      // User finished speaking - translate
+      if (data.interaction_type === 'response_required' || data.interaction_type === 'reminder_required') {
+        const transcript = data.transcript || '';
+        
+        if (transcript.trim() === '') {
+          ws.send(JSON.stringify({
+            response_type: 'response',
+            content: '',
+            content_complete: true,
+          }));
+          return;
+        }
+
+        // Translate
+        const translation = await translateText(transcript);
+        console.log('Translation:', transcript.slice(0, 30), '->', translation.slice(0, 30));
+
+        ws.send(JSON.stringify({
+          response_type: 'response',
+          content: translation,
+          content_complete: true,
+        }));
+      }
+    } catch (error) {
+      console.error('WS error:', error);
+      ws.send(JSON.stringify({
         response_type: 'response',
-        content: '',  // Silent start, wait for user input
-      });
+        content: 'Er ging iets mis.',
+        content_complete: true,
+      }));
     }
+  });
 
-    if (interaction_type === 'update_only') {
-      return res.json({ response_type: 'update_only' });
-    }
+  ws.on('close', () => {
+    console.log('Retell WebSocket disconnected');
+  });
 
-    // Main translation logic
-    if (!transcript || transcript.trim() === '') {
-      return res.json({
-        response_type: 'response',
-        content: '',
-      });
-    }
-
-    // Detect language and translate
-    const translation = await translateText(transcript);
-    
-    console.log('Translation:', translation);
-
-    res.json({
-      response_type: 'response',
-      content: translation,
-    });
-  } catch (error) {
-    console.error('Error:', error);
-    res.json({
-      response_type: 'response',
-      content: 'Sorry, er ging iets mis met de vertaling.',
-    });
-  }
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+  });
 });
 
 async function translateText(text) {
@@ -105,13 +132,13 @@ RULES:
 2. Translate to the OTHER language
 3. Return ONLY the translation, nothing else
 4. Keep the same tone and style
-5. If the input is neither Dutch nor Italian, translate it to both languages briefly
+5. If unclear, assume Dutch input and translate to Italian
 
 Examples:
-- Input: "Hallo, hoe gaat het?" → Output: "Ciao, come stai?"
-- Input: "Buongiorno, come sta?" → Output: "Goedemorgen, hoe gaat het?"
-- Input: "Ik wil graag een koffie" → Output: "Vorrei un caffè"
-- Input: "Quanto costa questo?" → Output: "Hoeveel kost dit?"`;
+- "Hallo, hoe gaat het?" → "Ciao, come stai?"
+- "Buongiorno, come sta?" → "Goedemorgen, hoe gaat het?"
+- "Ik wil graag een koffie" → "Vorrei un caffè"
+- "Quanto costa questo?" → "Hoeveel kost dit?"`;
 
   const response = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
@@ -126,34 +153,8 @@ Examples:
   return response.choices[0].message.content.trim();
 }
 
-// WebSocket endpoint for Retell (if needed)
-app.ws?.('/llm-websocket/:call_id', (ws, req) => {
-  console.log('WebSocket connected:', req.params.call_id);
-  
-  ws.on('message', async (message) => {
-    try {
-      const data = JSON.parse(message);
-      console.log('WS received:', data);
-      
-      if (data.interaction_type === 'ping_pong') {
-        ws.send(JSON.stringify({ response_type: 'ping_pong' }));
-        return;
-      }
-      
-      if (data.transcript) {
-        const translation = await translateText(data.transcript);
-        ws.send(JSON.stringify({
-          response_type: 'response',
-          content: translation,
-        }));
-      }
-    } catch (error) {
-      console.error('WS error:', error);
-    }
-  });
-});
-
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`NL-IT Translator backend running on port ${PORT}`);
+server.listen(PORT, () => {
+  console.log(`NL-IT Translator running on port ${PORT}`);
+  console.log(`WebSocket: wss://[host]/llm-websocket`);
 });
