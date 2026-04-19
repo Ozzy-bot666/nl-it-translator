@@ -53,10 +53,27 @@ app.post('/get-call-token', async (req, res) => {
 wss.on('connection', (ws, req) => {
   console.log('Retell WebSocket connected');
   
+  // Send initial config
+  ws.send(JSON.stringify({
+    response_type: 'config',
+    config: {
+      auto_reconnect: true,
+      call_details: false,
+    }
+  }));
+  
+  // Send empty begin message (agent waits for user)
+  ws.send(JSON.stringify({
+    response_type: 'response',
+    response_id: 0,
+    content: '',
+    content_complete: true,
+  }));
+  
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message.toString());
-      console.log('Received:', data.interaction_type, data.transcript?.slice(0, 50));
+      console.log('Received:', data.interaction_type);
 
       // Ping pong for connection keep-alive
       if (data.interaction_type === 'ping_pong') {
@@ -67,28 +84,26 @@ wss.on('connection', (ws, req) => {
         return;
       }
 
-      // Call started - silent greeting
-      if (data.interaction_type === 'call_details') {
-        ws.send(JSON.stringify({
-          response_type: 'response',
-          content: '',
-          content_complete: true,
-        }));
-        return;
-      }
-
-      // Update only - acknowledge
+      // Update only - no response needed
       if (data.interaction_type === 'update_only') {
         return;
       }
 
       // User finished speaking - translate
       if (data.interaction_type === 'response_required' || data.interaction_type === 'reminder_required') {
-        const transcript = data.transcript || '';
+        const responseId = data.response_id;
         
-        if (transcript.trim() === '') {
+        // Extract text from transcript array
+        const transcriptArray = data.transcript || [];
+        const lastUtterance = transcriptArray[transcriptArray.length - 1];
+        const userText = lastUtterance?.content || '';
+        
+        console.log('User said:', userText.slice(0, 50));
+        
+        if (userText.trim() === '') {
           ws.send(JSON.stringify({
             response_type: 'response',
+            response_id: responseId,
             content: '',
             content_complete: true,
           }));
@@ -96,22 +111,29 @@ wss.on('connection', (ws, req) => {
         }
 
         // Translate
-        const translation = await translateText(transcript);
-        console.log('Translation:', transcript.slice(0, 30), '->', translation.slice(0, 30));
+        const translation = await translateText(userText);
+        console.log('Translation:', userText.slice(0, 30), '->', translation.slice(0, 30));
 
         ws.send(JSON.stringify({
           response_type: 'response',
+          response_id: responseId,
           content: translation,
           content_complete: true,
         }));
       }
     } catch (error) {
       console.error('WS error:', error);
-      ws.send(JSON.stringify({
-        response_type: 'response',
-        content: 'Er ging iets mis.',
-        content_complete: true,
-      }));
+      // Try to send error response if we have response_id
+      try {
+        ws.send(JSON.stringify({
+          response_type: 'response',
+          response_id: 0,
+          content: 'Vertaalfout.',
+          content_complete: true,
+        }));
+      } catch (e) {
+        console.error('Failed to send error response');
+      }
     }
   });
 
@@ -125,7 +147,7 @@ wss.on('connection', (ws, req) => {
 });
 
 async function translateText(text) {
-  const systemPrompt = `You are a translator between Dutch and Italian.
+  const systemPrompt = `You are a real-time translator between Dutch and Italian.
 
 RULES:
 1. Detect the input language (Dutch or Italian)
