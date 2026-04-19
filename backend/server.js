@@ -10,7 +10,6 @@ app.use(cors());
 app.use(express.json());
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/llm-websocket' });
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
@@ -30,6 +29,31 @@ function debugLog(category, message, data = null) {
   if (DEBUG_LOG.length > MAX_LOG_ENTRIES) DEBUG_LOG.pop();
   console.log(`[${entry.timestamp}] [${category}] ${message}`, data ? JSON.stringify(data).slice(0, 200) : '');
 }
+
+// ============ WEBSOCKET SERVER ============
+// Note: Retell connects to /llm-websocket/{call_id}
+// We need to handle dynamic paths, so we use noServer mode
+const wss = new WebSocketServer({ noServer: true });
+
+// Handle WebSocket upgrade manually to support /llm-websocket/{call_id}
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url, 'http://localhost').pathname;
+  debugLog('WS_UPGRADE', `Upgrade request for: ${pathname}`);
+  
+  if (pathname.startsWith('/llm-websocket')) {
+    // Extract call_id from path (e.g., /llm-websocket/call_abc123)
+    const callId = pathname.split('/')[2] || 'unknown';
+    debugLog('WS_UPGRADE', `Accepting connection for call: ${callId}`);
+    
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      ws.callId = callId; // Attach call_id to the websocket
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    debugLog('WS_UPGRADE', `Rejected - path doesn't match /llm-websocket/*`);
+    socket.destroy();
+  }
+});
 
 // ============ ENDPOINTS ============
 
