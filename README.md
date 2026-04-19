@@ -1,76 +1,71 @@
-# Dutch-Italian Real-time Voice Translator
+# NL-IT Voice Translator 🇳🇱 ↔ 🇮🇹
 
-Real-time bidirectional voice translation between Dutch and Italian using Pipecat.
-
-- 🇳🇱 Speak Dutch → Hear Italian
-- 🇮🇹 Speak Italian → Hear Dutch
+Real-time voice translation between Dutch and Italian using Pipecat.
 
 ## Architecture
 
-- **Daily.co** - WebRTC transport for real-time audio
-- **Deepgram** - Speech-to-text with multilingual detection
-- **OpenAI** - GPT for translation
-- **Cartesia** - Text-to-speech with native voices
+```
+[Push-to-Talk] → [Deepgram STT] → [OpenAI Translate] → [Cartesia TTS] → [Speaker]
+```
 
-## Setup
+- **STT**: Deepgram (multi-language detection)
+- **LLM**: OpenAI GPT-4 (translation)
+- **TTS**: Cartesia (Italian/Dutch voices)
+- **Transport**: Daily WebRTC
 
-### 1. Install dependencies
+## Quick Start
+
+### 1. Server Setup
 
 ```bash
-pip install uv  # if not installed
+cd server
 uv sync
-```
-
-### 2. Configure environment
-
-```bash
-cp env.example .env
-# Edit .env with your API keys
-```
-
-### 3. Run locally
-
-```bash
 uv run bot.py -t daily
 ```
 
-Visit `http://localhost:7860/` to join the Daily room.
+Server runs on `http://localhost:7860`
 
-### 4. Open translation client
-
-```bash
-open index.html
-```
-
-Select "Dutch" or "Italian" track based on which translation you want to hear.
-
-## Docker
+### 2. Client Setup
 
 ```bash
-docker build -t nl-it-translator .
-docker run --env-file .env -p 7860:7860 nl-it-translator
+cd client
+npm install
+npm run dev
 ```
 
-## API Keys Needed
+Client runs on `http://localhost:3000`
 
-| Service | Purpose | Get it at |
-|---------|---------|-----------|
-| Daily.co | WebRTC rooms | https://dashboard.daily.co |
-| Deepgram | Speech-to-text | https://console.deepgram.com |
-| OpenAI | Translation | https://platform.openai.com |
-| Cartesia | Text-to-speech | https://cartesia.ai |
+### 3. Use It
+
+1. Open http://localhost:3000
+2. Click "Connect"
+3. Select mode: 🇳🇱→🇮🇹 or 🇮🇹→🇳🇱
+4. Hold the button and speak
+5. Release to hear the translation
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DAILY_API_KEY` | Yes | Daily.co API key |
-| `DEEPGRAM_API_KEY` | Yes | Deepgram API key |
-| `OPENAI_API_KEY` | Yes | OpenAI API key |
-| `CARTESIA_API_KEY` | Yes | Cartesia API key |
-| `DUTCH_VOICE_ID` | No | Custom Cartesia voice for Dutch |
-| `ITALIAN_VOICE_ID` | No | Custom Cartesia voice for Italian |
+### Server (.env)
+- `DAILY_API_KEY` - Daily.co API key
+- `OPENAI_API_KEY` - OpenAI API key
+- `DEEPGRAM_API_KEY` - Deepgram API key
+- `CARTESIA_API_KEY` - Cartesia API key
+
+### Client (.env.local)
+- `BOT_START_URL` - Server URL (default: http://localhost:7860/start)
+
+## Deploy
+
+### Server (Render)
+- Runtime: Python
+- Build: `pip install uv && uv sync`
+- Start: `uv run bot.py -t daily`
+
+### Client (Render/Vercel)
+- Runtime: Node.js
+- Build: `npm install && npm run build`
+- Start: `npm start`
 
 ## License
 
-BSD 2-Clause (based on pipecat-examples)
+MIT
