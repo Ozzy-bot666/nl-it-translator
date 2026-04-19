@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🇳🇱 ↔ 🇮🇹 Vertaler</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/retell-client-js-sdk@3.3.3/dist/index.umd.min.js"></script>
+  <style>
+    @keyframes pulse-ring {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(1.5); opacity: 0; }
+    }
+    .recording .pulse-ring {
+      animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 min-h-screen flex flex-col">
+  
+  <!-- Header -->
+  <header class="p-6 text-center">
+    <h1 class="text-3xl font-bold text-white">🇳🇱 ↔ 🇮🇹 Vertaler</h1>
+    <p class="text-slate-400 mt-2">Spreek Nederlands of Italiaans - automatische vertaling</p>
+  </header>
+
+  <!-- Main -->
+  <main class="flex-1 flex flex-col items-center justify-center p-6">
+    
+    <!-- Status -->
+    <div id="status" class="mb-8 text-slate-300 text-lg">
+      Klik op de microfoon om te beginnen
+    </div>
+
+    <!-- PTT Button -->
+    <div class="relative">
+      <!-- Pulse ring (visible when recording) -->
+      <div class="pulse-ring absolute inset-0 rounded-full bg-red-500 opacity-0"></div>
+      
+      <!-- Main button -->
+      <button 
+        id="ptt-btn"
+        class="relative w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 
+               hover:from-blue-400 hover:to-blue-600 
+               active:from-red-500 active:to-red-700
+               shadow-2xl transition-all duration-200 
+               flex items-center justify-center
+               disabled:opacity-50 disabled:cursor-not-allowed"
+        onmousedown="startRecording()"
+        onmouseup="stopRecording()"
+        ontouchstart="startRecording()"
+        ontouchend="stopRecording()"
+      >
+        <svg id="mic-icon" class="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+        </svg>
+      </button>
+    </div>
+
+    <!-- Instructions -->
+    <div class="mt-8 text-center text-slate-400 text-sm max-w-md">
+      <p><strong>Houd ingedrukt</strong> om te spreken</p>
+      <p class="mt-1">Laat los om de vertaling te horen</p>
+    </div>
+
+    <!-- Transcript -->
+    <div id="transcript-container" class="mt-8 w-full max-w-md hidden">
+      <div class="bg-slate-800/50 rounded-lg p-4">
+        <p class="text-slate-400 text-sm mb-2">Laatste vertaling:</p>
+        <p id="transcript" class="text-white text-lg"></p>
+      </div>
+    </div>
+  </main>
+
+  <!-- Footer -->
+  <footer class="p-4 text-center text-slate-500 text-sm">
+    Powered by Retell AI
+  </footer>
+
+  <script>
+    // Config - UPDATE THESE
+    const RETELL_AGENT_ID = 'YOUR_AGENT_ID'; // TODO: Set after creating Retell agent
+    const BACKEND_URL = 'https://nl-it-translator-backend.onrender.com';
+    
+    let retellClient = null;
+    let isRecording = false;
+    let callId = null;
+
+    const pttBtn = document.getElementById('ptt-btn');
+    const statusEl = document.getElementById('status');
+    const transcriptContainer = document.getElementById('transcript-container');
+    const transcriptEl = document.getElementById('transcript');
+
+    async function initRetell() {
+      try {
+        retellClient = new window.RetellClient();
+        
+        retellClient.on('call_started', () => {
+          console.log('Call started');
+          updateStatus('Verbonden - houd knop ingedrukt om te spreken');
+        });
+        
+        retellClient.on('call_ended', () => {
+          console.log('Call ended');
+          updateStatus('Gesprek beëindigd');
+          callId = null;
+        });
+        
+        retellClient.on('agent_start_talking', () => {
+          console.log('Agent speaking');
+          updateStatus('🔊 Vertaling...');
+        });
+        
+        retellClient.on('agent_stop_talking', () => {
+          console.log('Agent stopped');
+          updateStatus('Klaar - houd knop ingedrukt voor volgende');
+        });
+
+        retellClient.on('update', (update) => {
+          if (update.transcript) {
+            showTranscript(update.transcript);
+          }
+        });
+
+        retellClient.on('error', (error) => {
+          console.error('Retell error:', error);
+          updateStatus('Fout: ' + error.message);
+        });
+
+        // Start call immediately
+        await startCall();
+        
+      } catch (error) {
+        console.error('Init error:', error);
+        updateStatus('Fout bij initialisatie: ' + error.message);
+      }
+    }
+
+    async function startCall() {
+      try {
+        updateStatus('Verbinden...');
+        
+        // Get access token from backend
+        const response = await fetch(`${BACKEND_URL}/get-call-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ agent_id: RETELL_AGENT_ID })
+        });
+        
+        if (!response.ok) throw new Error('Failed to get token');
+        
+        const { access_token } = await response.json();
+        
+        await retellClient.startCall({
+          accessToken: access_token,
+          sampleRate: 24000,
+          captureDeviceId: 'default',
+        });
+        
+        callId = true;
+        
+      } catch (error) {
+        console.error('Start call error:', error);
+        updateStatus('Kan niet verbinden: ' + error.message);
+      }
+    }
+
+    function startRecording() {
+      if (!callId) {
+        initRetell();
+        return;
+      }
+      
+      isRecording = true;
+      pttBtn.classList.add('recording');
+      pttBtn.parentElement.classList.add('recording');
+      pttBtn.style.background = 'linear-gradient(to bottom right, #ef4444, #dc2626)';
+      updateStatus('🎤 Spreek nu...');
+      
+      // Unmute microphone
+      if (retellClient) {
+        retellClient.mute(false);
+      }
+    }
+
+    function stopRecording() {
+      if (!isRecording) return;
+      
+      isRecording = false;
+      pttBtn.classList.remove('recording');
+      pttBtn.parentElement.classList.remove('recording');
+      pttBtn.style.background = '';
+      updateStatus('⏳ Vertalen...');
+      
+      // Mute microphone - triggers translation
+      if (retellClient) {
+        retellClient.mute(true);
+      }
+    }
+
+    function updateStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function showTranscript(text) {
+      transcriptContainer.classList.remove('hidden');
+      transcriptEl.textContent = text;
+    }
+
+    // Prevent context menu on long press (mobile)
+    pttBtn.addEventListener('contextmenu', (e) => e.preventDefault());
+    
+    // Initialize
+    updateStatus('Klik op de microfoon om te verbinden');
+  </script>
+</body>
+</html>

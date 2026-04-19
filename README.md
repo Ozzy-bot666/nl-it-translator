@@ -1,71 +1,57 @@
 # NL-IT Voice Translator 🇳🇱 ↔ 🇮🇹
 
-Real-time voice translation between Dutch and Italian using Pipecat.
+Real-time voice translation between Dutch and Italian using Retell AI.
+
+## How it works
+
+1. User holds push-to-talk button and speaks (Dutch or Italian)
+2. Retell STT transcribes the speech
+3. Backend detects language and translates via GPT-4
+4. Retell TTS speaks the translation
 
 ## Architecture
 
 ```
-[Push-to-Talk] → [Deepgram STT] → [OpenAI Translate] → [Cartesia TTS] → [Speaker]
+[Browser + PTT] → [Retell AI] → [Backend LLM Webhook] → [OpenAI Translate]
+                      ↓
+              [Retell TTS Output]
 ```
 
-- **STT**: Deepgram (multi-language detection)
-- **LLM**: OpenAI GPT-4 (translation)
-- **TTS**: Cartesia (Italian/Dutch voices)
-- **Transport**: Daily WebRTC
+## Setup
 
-## Quick Start
+### 1. Create Retell Agent
 
-### 1. Server Setup
+1. Go to https://app.retellai.com
+2. Create new agent
+3. Set LLM to "Custom LLM"
+4. Set webhook URL to: `https://nl-it-translator-backend.onrender.com/llm-webhook`
+5. Copy the Agent ID
 
-```bash
-cd server
-uv sync
-uv run bot.py -t daily
+### 2. Backend (.env)
+
+```
+OPENAI_API_KEY=sk-your-key
+RETELL_API_KEY=your-retell-key
 ```
 
-Server runs on `http://localhost:7860`
+### 3. Frontend
 
-### 2. Client Setup
-
-```bash
-cd client
-npm install
-npm run dev
-```
-
-Client runs on `http://localhost:3000`
-
-### 3. Use It
-
-1. Open http://localhost:3000
-2. Click "Connect"
-3. Select mode: 🇳🇱→🇮🇹 or 🇮🇹→🇳🇱
-4. Hold the button and speak
-5. Release to hear the translation
-
-## Environment Variables
-
-### Server (.env)
-- `DAILY_API_KEY` - Daily.co API key
-- `OPENAI_API_KEY` - OpenAI API key
-- `DEEPGRAM_API_KEY` - Deepgram API key
-- `CARTESIA_API_KEY` - Cartesia API key
-
-### Client (.env.local)
-- `BOT_START_URL` - Server URL (default: http://localhost:7860/start)
+Update `RETELL_AGENT_ID` in `index.html`
 
 ## Deploy
 
-### Server (Render)
-- Runtime: Python
-- Build: `pip install uv && uv sync`
-- Start: `uv run bot.py -t daily`
-
-### Client (Render/Vercel)
-- Runtime: Node.js
-- Build: `npm install && npm run build`
+### Backend (Render)
+- Runtime: Node
+- Build: `npm install`
 - Start: `npm start`
+- Root dir: `backend`
 
-## License
+### Frontend (Render Static)
+- Publish dir: `frontend`
 
-MIT
+## Usage
+
+1. Open the web app
+2. Click the microphone to connect
+3. Hold button and speak Dutch or Italian
+4. Release to hear translation
