@@ -64,7 +64,7 @@
     <div id="transcript-container" class="mt-8 w-full max-w-md hidden">
       <div class="bg-slate-800/50 rounded-lg p-4">
         <p class="text-slate-400 text-sm mb-2">Transcript:</p>
-        <p id="transcript" class="text-white text-lg"></p>
+        <p id="transcript" class="text-white text-lg whitespace-pre-wrap"></p>
       </div>
     </div>
   </main>
@@ -116,9 +116,13 @@
     });
 
     retellClient.on('update', (update) => {
-      if (update.transcript) {
+      if (update.transcript && update.transcript.length > 0) {
         transcriptContainer.classList.remove('hidden');
-        transcriptEl.textContent = update.transcript;
+        // transcript is array of {role, content} objects
+        const text = update.transcript
+          .map(t => `${t.role === 'agent' ? '🇮🇹' : '🇳🇱'} ${t.content}`)
+          .join('\n');
+        transcriptEl.textContent = text;
       }
     });
 
